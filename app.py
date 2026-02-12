@@ -1,21 +1,52 @@
-from flask import Flask, render_template, request
-import numpy as np
+import os
+import requests
 import pickle
+import numpy as np
+from flask import Flask, render_template, request
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
 from tensorflow.keras.models import Model
-import os
 
 app = Flask(__name__)
+
+# ---------------------------------------------------------
+# وظيفة التحميل التلقائي للملفات الكبيرة
+# ---------------------------------------------------------
+def download_file_if_missing(url, filename):
+    if not os.path.exists(filename):
+        print(f"File {filename} missing. Downloading from Google Drive...")
+        try:
+            response = requests.get(url, stream=True)
+            response.raise_for_status() # التأكد من أن الرابط يعمل
+            with open(filename, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Download {filename} complete!")
+        except Exception as e:
+            print(f"Error downloading {filename}: {e}")
+
+# استبدلي الـ IDs بالتي حصلتِ عليها من Google Drive
+MODEL_URL = "https://drive.google.com/uc?export=download&id=اكتبي_هنا_ID_ملف_الـ_keras"
+FEATURES_URL = "https://drive.google.com/uc?export=download&id=اكتبي_هنا_ID_ملف_الـ_pkl"
+
+# تحميل الملفات قبل بدء السيرفر
+download_file_if_missing(MODEL_URL, "model.keras")
+# ملحوظة: الكود الخاص بكِ لا يستخدم features.pkl في الـ app.py 
+# ولكنه يستخدمه في التدريب، إذا كنتِ ستحتاجينه أضيفي السطر التالي:
+# download_file_if_missing(FEATURES_URL, "features .pkl")
 
 # ----------------------
 # Load model and data
 # ----------------------
-model = load_model("model.keras")  # تأكدي من اسم الملف صحيح
-tokenizer = pickle.load(open("tokenizer.pkl", "rb"))
-max_length = int(pickle.load(open("max_length.pkl", "rb")))
+# قمنا بوضع التحميل داخل try/except لتجنب انهيار السيرفر إذا فشل التحميل
+try:
+    model = load_model("model.keras")
+    tokenizer = pickle.load(open("tokenizer.pkl", "rb"))
+    max_length = int(pickle.load(open("max_length.pkl", "rb")))
+except Exception as e:
+    print(f"Error loading models: {e}")
 
 # Load VGG16 feature extractor
 base_model = VGG16()
@@ -44,27 +75,21 @@ def predict_caption(model, image, tokenizer, max_length):
     """Generate caption for the given image"""
     in_text = "<start>"
     for i in range(max_length):
-        # encode and pad input
         sequence = tokenizer.texts_to_sequences([in_text])[0]
         sequence = pad_sequences([sequence], maxlen=max_length)
 
-        # predict next word
         yhat = model.predict([image, sequence], verbose=0)[0]
         yhat_index = np.argmax(yhat)
         word = idx_to_word(yhat_index, tokenizer)
 
-        # stop if word not found or end tag
         if word is None or word == "<end>":
             break
-
-        # prevent repeating the last word
+        
         if word == in_text.split()[-1]:
             break
 
-        # append word
         in_text += " " + word
 
-    # remove start and end tags
     final_caption = in_text.replace("<start>", "").replace("<end>", "").strip()
     return final_caption
 
@@ -77,14 +102,18 @@ def index():
     image_file = None
 
     if request.method == "POST":
+        if 'image' not in request.files:
+            return render_template("index.html", caption="No image uploaded")
+        
         file = request.files["image"]
+        if file.filename == '':
+            return render_template("index.html", caption="No image selected")
+
         if file:
-            # ensure uploads folder exists
             os.makedirs("static/uploads", exist_ok=True)
             image_path = os.path.join("static/uploads", file.filename)
             file.save(image_path)
 
-            # extract features and generate caption
             photo = extract_features(image_path)
             caption = predict_caption(model, photo, tokenizer, max_length)
             image_file = file.filename
@@ -95,4 +124,6 @@ def index():
 # Run app
 # ----------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # نستخدم port من المتغيرات البيئية ليتوافق مع Render
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
