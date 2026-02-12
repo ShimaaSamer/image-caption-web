@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Image Caption Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <h1>🤖 AI Image Caption Generator</h1>
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="image" required>
+        <button type="submit">Generate Caption</button>
+    </form>
+
+    {% if image_file %}
+        <div class="result">
+            <img src="{{ url_for('static', filename='uploads/' + image_file) }}">
+        </div>
+    {% endif %}
+
+    {% if caption %}
+        <div class="caption-box">
+            <h2>Generated Caption:</h2>
+            <p>{{ caption }}</p>
+        </div>
+    {% endif %}
+</div>
+
+</body>
+</html>

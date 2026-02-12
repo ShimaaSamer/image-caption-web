@@ -1,0 +1,18 @@
+# الملفات التقيلة (الموديلات والبيانات)
+features.pkl
+best_model.h5
+model.keras
+
+# ملفات البيئة الافتراضية
+venv/
+ENV/
+bin/
+lib/
+
+# ملفات الويندوز والنظام
+Thumbs.db
+.DS_Store
+
+# ملفات بايثون المؤقتة
+__pycache__/
+*.py[cod]
